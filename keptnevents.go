@@ -115,7 +115,7 @@ type RcvConfig struct {
 }
 
 // KeptnListener listens for Keptn events on the path and port defined via Rcv
-func KeptnListener(Rcv RcvConfig) {
+func KeptnListener(Rcv RcvConfig) error {
 
 	ctx := context.Background()
 
@@ -125,15 +125,17 @@ func KeptnListener(Rcv RcvConfig) {
 	)
 	if err != nil {
 		log.Printf("failed to create transport, %v", err)
-		return
+		return err
 	}
 	c, err := cloudevents.NewClient(t)
 	if err != nil {
 		log.Printf("failed to create client, %v", err)
-		return
+		return err
 	}
 
 	log.Fatalf("failed to start receiver: %s", c.StartReceiver(ctx, KeptnHandler))
+
+	return nil
 }
 
 // KeptnHandler parses Keptn events and returns the Keptn event payload
