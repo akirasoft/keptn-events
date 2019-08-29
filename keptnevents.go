@@ -7,7 +7,6 @@ import (
 	"log"
 
 	cloudevents "github.com/cloudevents/sdk-go"
-	keptnutils "github.com/keptn/go-utils/pkg/utils"
 )
 
 // ConfigurationChanged Keptn event payload for changed configuration
@@ -114,10 +113,70 @@ type RcvConfig struct {
 	Path string `envconfig:"RCV_PATH" default:"/"`
 }
 
-// KeptnListener listens for Keptn events on the path and port defined via Rcv
-func KeptnListener(Rcv RcvConfig) error {
+// KeptnHandler parses Keptn events and returns the Keptn event payload
+func KeptnHandler(ctx context.Context, event cloudevents.Event) error {
+	var shkeptncontext string
+	event.Context.ExtensionAs("shkeptncontext", &shkeptncontext)
+
+	switch event.Type() {
+	case "sh.keptn.events.configuration-changed":
+		log.Println("sh.keptn.events.configuration-changed")
+		data := &ConfigurationChanged{}
+		if err := event.DataAs(data); err != nil {
+			return err
+		}
+		receiver(data)
+	case "sh.keptn.events.deployment-finished":
+		log.Println("sh.keptn.events.deployment-finished")
+		data := &DeploymentFinishedEvent{}
+		if err := event.DataAs(data); err != nil {
+			return err
+		}
+		receiver(data)
+	case "sh.keptn.events.evaluation-done":
+		log.Println("sh.keptn.events.evaluation-done")
+		data := &EvaluationDoneEvent{}
+		if err := event.DataAs(data); err != nil {
+			return err
+		}
+		receiver(data)
+	case "sh.keptn.events.new-artifact":
+		data := &NewArtifactEvent{}
+		if err := event.DataAs(data); err != nil {
+			return err
+		}
+		receiver(data)
+		log.Println("sh.keptn.events.new-artifact")
+	case "sh.keptn.events.tests-finished":
+		data := &TestsFinishedEvent{}
+		if err := event.DataAs(data); err != nil {
+			return err
+		}
+		receiver(data)
+		log.Println("sh.keptn.events.tests-finished")
+	case "sh.keptn.events.problem":
+		data := &ProblemEvent{}
+		if err := event.DataAs(data); err != nil {
+			return err
+		}
+		receiver(data)
+		log.Println("sh.keptn.events.problem")
+	default:
+		const errorMsg = "Received unexpected keptn event"
+		return errors.New(errorMsg)
+	}
+
+	return nil
+}
+
+var receiver func(interface{}) error
+
+// KeptnReceiver listens for Keptn events on the path and port defined via Rcv
+func KeptnReceiver(Rcv RcvConfig, keptnEventCallback func(interface{}) error) error {
 
 	ctx := context.Background()
+
+	receiver = keptnEventCallback
 
 	t, err := cloudevents.NewHTTPTransport(
 		cloudevents.WithPort(Rcv.Port),
@@ -133,48 +192,5 @@ func KeptnListener(Rcv RcvConfig) error {
 		return err
 	}
 
-	log.Fatalf("failed to start receiver: %s", c.StartReceiver(ctx, KeptnHandler))
-
-	return nil
-}
-
-// KeptnHandler parses Keptn events and returns the Keptn event payload
-func KeptnHandler(ctx context.Context, event cloudevents.Event) error {
-	var shkeptncontext string
-	event.Context.ExtensionAs("shkeptncontext", &shkeptncontext)
-
-	logger := keptnutils.NewLogger(shkeptncontext, event.Context.GetID(), "jira-service")
-
-	switch event.Type() {
-	case "sh.keptn.events.configuration-changed":
-		//return ConfigurationChanged
-		log.Println("sh.keptn.events.configuration-changed")
-	case "sh.keptn.events.deployment-finished":
-		//return DeploymentFinishedEvent
-		log.Println("sh.keptn.events.deployment-finished")
-	case "sh.keptn.events.evaluation-done":
-		//return EvaluationDoneEvent
-		log.Println("sh.keptn.events.evaluation-done")
-	case "sh.keptn.events.new-artifact":
-		//return NewArtifactEvent
-		log.Println("sh.keptn.events.new-artifact")
-	case "sh.keptn.events.tests-finished":
-		//return TestsFinishedEvent
-		log.Println("sh.keptn.events.tests-finished")
-	case "sh.keptn.events.problem":
-		//return ProblemEvent
-		log.Println("sh.keptn.events.problem")
-	default:
-		const errorMsg = "Received unexpected keptn event"
-		logger.Error(errorMsg)
-		return errors.New(errorMsg)
-	}
-	// data := &keptnevents.EvaluationDoneEvent{}
-	// if err := event.DataAs(data); err != nil {
-	// 	//TODO: replace with keptn logger
-	// 	logger.Error(fmt.Sprintf("Got Data Error: %s", err.Error()))
-	// 	return err
-	// }
-
-	return nil
+	return c.StartReceiver(ctx, KeptnHandler)
 }
